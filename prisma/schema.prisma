@@ -1,0 +1,594 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String    @id @default(uuid())
+  clerkUserId       String    @unique // Clerk's User ID
+  email             String    @unique
+  name              String?
+  imageUrl          String?
+  role              UserRole  @default(UNASSIGNED) // UNASSIGNED, PATIENT, DOCTOR, ADMIN
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  credits           Int       @default(0)
+  age               Int?
+  gender            String?
+  address           String?
+  allergies         String?
+  food_habit        FoodHabit?
+  bp_sys            Int?
+  bp_dia            Int?
+  sugar_fasting     Decimal?  @db.Decimal(5,2)
+  sugar_pp          Decimal?  @db.Decimal(5,2)
+  surgery           String?
+  transfusion       String?
+  accident          String?
+  medical_history   String?
+
+  // Enhanced Patient Health Data
+  dateOfBirth       DateTime?
+  ethnicity         String?
+  occupation        String?
+  height            Decimal?  @db.Decimal(5,1) // cm
+  weight            Decimal?  @db.Decimal(5,1) // kg
+  bmi               Decimal?  @db.Decimal(4,1)
+  waistCircumference Decimal? @db.Decimal(5,1) // cm
+
+  // Lifestyle Factors
+  smokingStatus     SmokingStatus?
+  cigarettesPerDay  Int?
+  alcoholConsumption AlcoholLevel?
+  exerciseFrequency ExerciseFrequency?
+  sleepHours        Decimal?  @db.Decimal(3,1)
+  stressLevel       Int?      // 1-10 scale
+
+  // Lab Values (most recent)
+  hemoglobin        Decimal?  @db.Decimal(4,1)
+  hba1c             Decimal?  @db.Decimal(4,1)
+  cholesterolTotal  Int?
+  ldl               Int?
+  hdl               Int?
+  triglycerides     Int?
+  creatinine        Decimal?  @db.Decimal(4,2)
+  egfr              Decimal?  @db.Decimal(5,1)
+  alt               Int?
+  ast               Int?
+  wbcCount          Decimal?  @db.Decimal(4,1)
+
+  // Vital Signs (current/most recent)
+  heartRate         Int?
+  hrv               Int?      // Heart Rate Variability
+  restingHeartRate  Int?      // Resting heart rate from Health Connect
+  spo2              Decimal?  @db.Decimal(4,1)
+  temperature       Decimal?  @db.Decimal(4,1)
+  skinTemperature   Decimal?  @db.Decimal(4,1)  // Skin temperature from wearables
+  respiratoryRate   Int?
+
+  // Activity Data (from Health Connect)
+  todaySteps        Int?
+  todayDistance     Decimal?  @db.Decimal(10,2) // meters
+  todayCalories     Decimal?  @db.Decimal(8,2)  // total calories burned
+  activeCalories    Decimal?  @db.Decimal(8,2)  // active calories burned
+  floorsClimbed     Int?
+  elevationGained   Decimal?  @db.Decimal(8,2)  // meters
+  vo2Max            Decimal?  @db.Decimal(5,2)
+  exerciseSessions  Int?      // Number of exercise sessions this week
+
+  // Body Composition (from Health Connect)
+  bodyFat           Decimal?  @db.Decimal(4,1)  // percentage
+  bodyWaterMass     Decimal?  @db.Decimal(5,2)  // kg
+  boneMass          Decimal?  @db.Decimal(5,2)  // kg
+  leanBodyMass      Decimal?  @db.Decimal(5,2)  // kg
+  basalMetabolicRate Int?     // kcal/day
+
+  // Nutrition Data (from Health Connect)
+  hydrationMl       Int?      // daily hydration in ml
+  nutritionData     Json?     // Latest nutrition record
+
+  // Sleep Data (from Health Connect)
+  sleepStages       Json?     // Sleep stages breakdown
+  lastSleepStart    DateTime?
+  lastSleepEnd      DateTime?
+
+  // Cycle Tracking (from Health Connect)
+  menstruationFlow  String?   // light/medium/heavy
+  lastPeriodDate    DateTime?
+  cycleLength       Int?      // days
+
+  // Health Connect Sync Metadata
+  lastHealthConnectSync DateTime?
+
+  // Current Medications & Conditions
+  currentMedications Json?    // Array of medication objects
+  currentConditions Json?     // Array of condition objects
+  pregnancyStatus   PregnancyStatus?
+  
+  specialty         String?
+  experience        Int?      
+  credentialUrl     String?
+  description       String?   @db.Text
+  verificationStatus VerificationStatus?  @default(PENDING)
+  
+  patientAppointments Appointment[] @relation("PatientAppointments")
+  doctorAppointments  Appointment[] @relation("DoctorAppointments")
+  availabilities      Availability[]
+  transactions        CreditTransaction[]
+  payouts             Payout[]
+  chats               Chat[]
+
+  // ML and Health Data Relations
+  mlPredictions       MLModelPrediction[] @relation("UserMLPredictions")
+  patientPrescriptions Prescription[] @relation("PatientPrescriptions")
+  doctorPrescriptions Prescription[] @relation("DoctorPrescriptions")
+  vitalSigns          VitalSign[] @relation("UserVitals")
+  labResults          LabResult[] @relation("UserLabResults")
+}
+
+enum UserRole {
+  UNASSIGNED
+  PATIENT
+  DOCTOR
+  ADMIN
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum FoodHabit {
+  VEG
+  NON_VEG
+  BOTH
+}
+
+enum SmokingStatus {
+  NEVER
+  FORMER
+  CURRENT
+}
+
+enum AlcoholLevel {
+  NONE
+  OCCASIONAL
+  MODERATE
+  HEAVY
+}
+
+enum ExerciseFrequency {
+  SEDENTARY
+  LIGHT
+  MODERATE
+  ACTIVE
+  VERY_ACTIVE
+}
+
+enum PregnancyStatus {
+  NOT_PREGNANT
+  PREGNANT
+  POSTPARTUM
+  UNKNOWN
+}
+
+model Availability {
+  id        String   @id @default(uuid())
+  doctorId  String
+  doctor    User     @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  startTime DateTime
+  endTime   DateTime
+  status    SlotStatus @default(AVAILABLE)
+  
+  @@index([doctorId, startTime])
+}
+
+enum SlotStatus {
+  AVAILABLE
+  BOOKED
+  BLOCKED
+}
+
+model Appointment {
+  id                String   @id @default(uuid())
+  patientId         String
+  patient           User     @relation("PatientAppointments", fields: [patientId], references: [id])
+  doctorId          String
+  doctor            User     @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  startTime         DateTime
+  endTime           DateTime
+  status            AppointmentStatus @default(SCHEDULED)
+  notes             String?  @db.Text
+  patientDescription String? @db.Text
+    
+  videoSessionId    String?  @unique
+  videoSessionToken String?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([status, startTime])
+  @@index([doctorId, startTime])
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+model CreditTransaction {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount            Int
+  type              TransactionType
+  createdAt         DateTime @default(now())
+}
+
+enum TransactionType {
+  CREDIT_PURCHASE
+  APPOINTMENT_ADDITION
+  APPOINTMENT_DEDUCTION
+  ADMIN_ADJUSTMENT
+}
+
+model Payout {
+  id              String        @id @default(uuid())
+  doctorId        String
+  doctor          User          @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  amount          Float
+  credits         Int
+  platformFee     Float
+  netAmount       Float
+  paypalEmail     String
+  status          PayoutStatus  @default(PROCESSING)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  processedAt     DateTime?
+  processedBy     String?
+
+  @@index([status, createdAt])
+  @@index([doctorId, status])
+}
+
+enum PayoutStatus {
+  PROCESSING
+  PROCESSED
+}
+
+model Chat {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  messages  Message[]
+
+  @@index([userId])
+}
+
+model Message {
+  id          String    @id @default(uuid())
+  chatId      String
+  chat        Chat      @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  role        Role
+  content     String    @db.Text
+  isEmergency Boolean   @default(false)
+  videos      Json?     // Array of video objects with url, title, description, source
+  createdAt   DateTime  @default(now())
+}
+
+enum Role {
+  USER
+  ASSISTANT
+}
+
+// ML Model Predictions
+model MLModelPrediction {
+  id                String    @id @default(uuid())
+  userId            String
+  user              User      @relation("UserMLPredictions", fields: [userId], references: [id], onDelete: Cascade)
+
+  // Input
+  symptoms          Json      // Array of symptom objects
+  symptomText       String    @db.Text
+  patientFeatures   Json?     // Age, gender, vitals, etc.
+
+  // ML Model Output
+  predictedDiseases Json      // Top-K diseases with probabilities
+  attentionWeights  Json?     // Symptom importance weights
+  triageLevel       String    // emergency/urgent/routine/self_care
+  confidenceScore   Decimal   @db.Decimal(5,2)
+
+  // Model Metadata
+  modelVersion      String
+  inferenceTime     Int       // milliseconds
+
+  // Feedback
+  doctorVerified    Boolean   @default(false)
+  actualDiagnosis   String?
+  feedbackScore     Int?      // 1-5 rating
+
+  createdAt         DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([modelVersion])
+}
+
+// Symptom Ontology
+model SymptomOntology {
+  id                String    @id @default(uuid())
+  symptomName       String    @unique
+  symptomId         String    @unique // Internal ID for model
+
+  // Hierarchical categories
+  category          String    // e.g., "respiratory", "cardiac"
+  subCategory       String?
+
+  // UMLS mapping
+  umlsCUI           String?
+  snomedCode        String?
+  icd10Codes        Json?     // Array of related ICD-10 codes
+
+  // Synonyms
+  synonyms          Json      // Array of alternative names
+
+  // Clinical context
+  severity          String?   // mild/moderate/severe
+  onset             String?   // acute/chronic
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([category])
+}
+
+// Disease Knowledge Base
+model DiseaseKnowledge {
+  id                String    @id @default(uuid())
+  diseaseName       String    @unique
+  diseaseId         String    @unique // Internal ID for model
+
+  // Medical codes
+  icd10Code         String?
+  snomedCode        String?
+  umlsCUI           String?
+
+  // Clinical information
+  description       String    @db.Text
+  prevalence        String?   // common/uncommon/rare
+  severity          String?   // mild/moderate/severe/life-threatening
+
+  // Relationships
+  commonSymptoms    Json      // Array of symptom IDs
+  rareSymptoms      Json?
+  comorbidities     Json?     // Associated conditions
+  riskFactors       Json?
+
+  // Treatment
+  firstLineTests    Json?
+  goldStandardTests Json?
+  treatmentOptions  Json?
+
+  // Evidence
+  pubmedReferences  Json?     // Array of PMIDs
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([icd10Code])
+}
+
+// Prescription Management
+model Prescription {
+  id                String    @id @default(uuid())
+  patientId         String
+  patient           User      @relation("PatientPrescriptions", fields: [patientId], references: [id])
+  doctorId          String
+  doctor            User      @relation("DoctorPrescriptions", fields: [doctorId], references: [id])
+
+  diagnosis         String
+  status            PrescriptionStatus @default(DRAFT)
+
+  medications       Medication[]
+  interactions      Json?     // Drug-drug interactions detected
+  warnings          Json?     // Patient-specific warnings
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  approvedAt        DateTime?
+
+  @@index([patientId, createdAt])
+  @@index([doctorId, status])
+}
+
+enum PrescriptionStatus {
+  DRAFT
+  APPROVED
+  DISPENSED
+  COMPLETED
+}
+
+// Individual Medications in Prescription
+model Medication {
+  id                String       @id @default(uuid())
+  prescriptionId    String
+  prescription      Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+
+  drugName          String
+  genericName       String?
+  rxcui             String?      // RxNorm identifier
+
+  dosage            String
+  frequency         String
+  route             String       // Oral, IV, etc.
+  duration          String
+
+  sideEffects       String?      @db.Text
+  contraindications String?      @db.Text
+  pregnancyCategory String?
+
+  createdAt         DateTime     @default(now())
+
+  @@index([prescriptionId])
+}
+
+// Patient Vital Signs History
+model VitalSign {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation("UserVitals", fields: [userId], references: [id], onDelete: Cascade)
+
+  // Heart Metrics
+  heartRate       Int?
+  hrv             Int?     // Heart Rate Variability (ms)
+  restingHeartRate Int?
+
+  // Blood Metrics
+  bpSystolic      Int?
+  bpDiastolic     Int?
+  spo2            Decimal? @db.Decimal(4,1)
+  bloodGlucose    Decimal? @db.Decimal(5,2)
+
+  // Body Metrics
+  temperature     Decimal? @db.Decimal(4,1)
+  skinTemperature Decimal? @db.Decimal(4,1)
+  respiratoryRate Int?
+  weight          Decimal? @db.Decimal(5,1)
+  height          Decimal? @db.Decimal(5,1)
+  bmi             Decimal? @db.Decimal(4,1)
+  bodyFat         Decimal? @db.Decimal(4,1)
+
+  // Activity Metrics
+  steps           Int?
+  distance        Decimal? @db.Decimal(10,2)
+  calories        Decimal? @db.Decimal(8,2)
+  floorsClimbed   Int?
+  vo2Max          Decimal? @db.Decimal(5,2)
+
+  // Sleep Metrics
+  sleepHours      Decimal? @db.Decimal(3,1)
+  sleepStages     Json?
+
+  source          VitalSource // Manual, HealthConnect, Device
+  recordedAt      DateTime
+  createdAt       DateTime @default(now())
+
+  @@index([userId, recordedAt])
+}
+
+enum VitalSource {
+  MANUAL
+  HEALTH_CONNECT
+  APPLE_HEALTH
+  DEVICE
+}
+
+// Lab Results
+model LabResult {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation("UserLabResults", fields: [userId], references: [id], onDelete: Cascade)
+
+  testType      String
+  testName      String
+  value         Decimal  @db.Decimal(10,2)
+  unit          String
+  normalRange   String
+  status        LabStatus // Normal, Abnormal, Critical
+
+  labName       String?
+  performedAt   DateTime
+  uploadedAt    DateTime @default(now())
+
+  @@index([userId, performedAt])
+}
+
+enum LabStatus {
+  NORMAL
+  ABNORMAL
+  CRITICAL
+}
+
+// Drug Information Cache (from free APIs)
+model DrugInformation {
+  id                String   @id @default(uuid())
+  drugName          String   @unique
+  rxcui             String?  @unique
+
+  genericName       String?
+  brandNames        Json?    // Array of brand names
+
+  // From OpenFDA
+  fdaLabel          Json?
+  indications       String?  @db.Text
+  dosageInfo        String?  @db.Text
+  contraindications String?  @db.Text
+  warnings          String?  @db.Text
+  adverseReactions  String?  @db.Text
+
+  // From RxNav
+  interactions      Json?    // Known drug interactions
+
+  // Metadata
+  lastUpdated       DateTime @updatedAt
+  createdAt         DateTime @default(now())
+
+  @@index([rxcui])
+}
+
+// PubMed Evidence Cache
+model MedicalEvidence {
+  id            String   @id @default(uuid())
+  disease       String
+  pmid          String   @unique // PubMed ID
+
+  title         String
+  abstract      String   @db.Text
+  journal       String?
+  pubDate       String?
+  relevanceScore Decimal @db.Decimal(4,2)
+
+  createdAt     DateTime @default(now())
+
+  @@index([disease])
+}
+
+// Model Training Metrics (for ML model versioning)
+model ModelTrainingMetrics {
+  id                String   @id @default(uuid())
+  modelVersion      String
+
+  // Dataset info
+  trainingSize      Int
+  validationSize    Int
+  testSize          Int
+
+  // Performance metrics
+  precision         Decimal  @db.Decimal(4,3)
+  recall            Decimal  @db.Decimal(4,3)
+  f1Score           Decimal  @db.Decimal(4,3)
+  accuracy          Decimal  @db.Decimal(4,3)
+  aucRoc            Decimal? @db.Decimal(4,3)
+
+  // Per-disease metrics
+  perDiseaseMetrics Json?
+
+  // Training details
+  epochs            Int
+  batchSize         Int
+  learningRate      Decimal  @db.Decimal(10,8)
+
+  trainedAt         DateTime @default(now())
+
+  @@index([modelVersion, trainedAt])
+}
